@@ -1,10 +1,11 @@
+/*
+Copyright © 2025 NAME HERE <EMAIL ADDRESS>
+
+*/
 package main
 
-import (
-	// "github.com/go-johnnyhe/weather/cmd"
-	"github.com/go-johnnyhe/weather/internal/api"
-)
+import "github.com/go-johnnyhe/weather/cmd"
 
 func main() {
-	api.GetWeatherData()
+	cmd.Execute()
 }

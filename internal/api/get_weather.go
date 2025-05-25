@@ -28,7 +28,11 @@ type WeatherInfo struct {
 }
 
 func GetWeatherData() {
-	apiKey := "fd1a9fe1168620101f0bcef74da06706"
+	apiKey := os.Getenv("OPENWEATHER_API_KEY")
+	if apiKey == "" {
+	fmt.Println("API key not set. Please define OPENWEATHER_API_KEY in your environment.")
+	os.Exit(1)
+	}
 	lat := 47.6038321
 	lon := -122.330062
 	basicURL := fmt.Sprintf("https://api.openweathermap.org/data/3.0/onecall?lat=%f&lon=%f&units=metric&lang=en&exclude=current,minutely,daily,alerts&appid=%s", lat, lon, apiKey)
@@ -58,14 +62,14 @@ func GetWeatherData() {
 	for i := 0; i < 5 && i < len(weatherData.Hourly); i++ {
 		h := weatherData.Hourly[i]
 		fmt.Printf("Time: %s | Temp: %.1f°C | Feels Like: %.1f°C | Humidity: %d%% | Condition: %s (%s) | Precip Chance: %.0f%%\n", 
-		unixToHour(h.Dt),
-		h.Temp,
-		h.FeelsLike,
-		h.Humidity,
-		h.Weather[0].Main,
-		h.Weather[0].Description,
-		h.Pop*100,
-	)
+			unixToHour(h.Dt),
+			h.Temp,
+			h.FeelsLike,
+			h.Humidity,
+			h.Weather[0].Main,
+			h.Weather[0].Description,
+			h.Pop*100,
+		)
 	}
 	// fmt.Println(string(body))
 
@@ -73,6 +77,8 @@ func GetWeatherData() {
 	// json.Unmarshal(body, &prettyJSON)
 	// formatted, _ := json.MarshalIndent(prettyJSON, "", "  ")
 	// fmt.Println(string(formatted))
+
+	// feature planning: 
 }
 
 
