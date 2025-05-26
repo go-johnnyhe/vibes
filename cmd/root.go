@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	// "math"
 	"net/http"
 	"net/url"
 	"os"
@@ -31,6 +29,55 @@ var rootCmd = &cobra.Command{
 		replyGeneralWeather()
 	},
 }
+
+type TempUnit string
+
+const (
+	Celsius TempUnit = "celsius"
+	Fahrenheit TempUnit = "fahrenheit"
+)
+
+func getThresholds(unit TempUnit) (freezing, cold, cool, mild, tempChange float64) {
+	if unit == Fahrenheit {
+		return celsiusToFahrenheit(FreezingThresholdCelsius),
+				celsiusToFahrenheit(ColdThresholdCelsius),
+				celsiusToFahrenheit(CoolThresholdCelsius),
+				celsiusToFahrenheit(MildThresholdCelsius),
+				tempChangeCelsiusToFahrenheit(TempChangeThresholdCelsius)
+	}
+	return FreezingThresholdCelsius, ColdThresholdCelsius, CoolThresholdCelsius, MildThresholdCelsius, TempChangeThresholdCelsius
+}
+
+func celsiusToFahrenheit(c float64) float64 {
+	return c * 9 / 5 + 32
+}
+
+func tempChangeCelsiusToFahrenheit(c float64) float64 {
+	return c * 9 / 5
+}
+
+const (
+    // Temperature categories (°C)
+    FreezingThresholdCelsius     = 5.0
+    ColdThresholdCelsius        = 10.0  
+    CoolThresholdCelsius        = 15.0
+    MildThresholdCelsius        = 20.0
+	
+	TempChangeThresholdCelsius   = 5.0
+
+	// Rain chance %
+	HighRainChance       = 60
+    ModerateRainChance   = 30
+
+	// API params
+	ForecastHours = 4
+	LocationTimeout = 10 * time.Second
+
+	// API endpoints
+	IPInfoURL = "https://ipinfo.io/json"
+	OpenMeteoBaseURL = "https://api.open-meteo.com/v1/forecast"
+	GeocodingBaseURL = "https://geocoding-api.open-meteo.com/v1/search"
+)
 
 type WeatherResponse struct {
 	Hourly HourlyData `json:"hourly"`
@@ -56,13 +103,16 @@ type Location struct {
 	Lon float64
 }
 
-var httpClient = &http.Client {
-	Timeout: 10 * time.Second,
-}
+var (
+	httpClient = &http.Client {
+		Timeout: LocationTimeout,
+	}
+	tempUnit string
+)
 
 func getLocation() (Location, error) {
 
-	ipResponse, err := httpClient.Get("https://ipinfo.io/json")
+	ipResponse, err := httpClient.Get(IPInfoURL)
 	if err != nil {
 		return Location{}, fmt.Errorf("failed to get IP info: %w", err)
 	}
@@ -90,7 +140,7 @@ func getLocation() (Location, error) {
 	}
 	lat, err := strconv.ParseFloat(strings.TrimSpace(coordinates[0]), 64)
 	if err != nil {
-		return Location{}, fmt.Errorf("error converting lattitude string to float: %w", err)
+		return Location{}, fmt.Errorf("error converting latitude string to float: %w", err)
 	}
 	lon, err := strconv.ParseFloat(strings.TrimSpace(coordinates[1]), 64)
 	if err != nil {
@@ -108,8 +158,8 @@ func getLocation() (Location, error) {
 	
 }
 
-func getWeatherData(lat float64, lon float64) (WeatherResponse, error) {
-	meteoApi := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=4&timezone=auto", lat, lon)
+func getWeatherData(lat float64, lon float64, unit TempUnit) (WeatherResponse, error) {
+	meteoApi := fmt.Sprintf("%s?latitude=%f&longitude=%f&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=4&timezone=auto&temperature_unit=%s", OpenMeteoBaseURL, lat, lon, string(unit))
 	response, err := httpClient.Get(meteoApi)
 	if err != nil {
 		return WeatherResponse{}, fmt.Errorf("error getting data from open-meteo: %w", err)
@@ -130,22 +180,23 @@ func getWeatherData(lat float64, lon float64) (WeatherResponse, error) {
 	return weatherData, nil
 }
 
-func analyzeWeather(location Location, weatherData WeatherResponse) {
+func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUnit) {
+	freezing, cold, cool, mild, tempChange := getThresholds(unit)
 	city := location.City
 	region := location.Region
 	fmt.Printf("Here's the current weather condition report for %s, %s:\n", city, region)
-	fiveDegreesRaise := false
-	fiveDegreesDrop := false
+	significantRise := false
+	significantDrop := false
 	currTemp := weatherData.Hourly.Temperature[0]
 	
 	// general temperature
-	if currTemp <= 5.0 {
+	if currTemp <= freezing {
 		fmt.Println("Freezing! Bundle up")
-	} else if currTemp <= 10.0 {
+	} else if currTemp <= cold {
 		fmt.Println("Proper jacket weather, maybe gloves")
-	} else if currTemp <= 15.0 {
+	} else if currTemp <= cool {
 		fmt.Println("Classic hoodie/light jacket zone")
-	} else if currTemp <= 20.0 {
+	} else if currTemp <= mild {
 		fmt.Println("Good weather, maybe just a light layer")
 	} else {
 		fmt.Println("T-shirt weather!")
@@ -164,25 +215,30 @@ func analyzeWeather(location Location, weatherData WeatherResponse) {
 	}
 	
 	// temp change: rise/drop 5°C
-	if maxTemp - currTemp >= 5.0 {
-		fiveDegreesRaise = true
+	if maxTemp - currTemp >= tempChange {
+		significantRise = true
 	}
 	
-	if currTemp - minTemp >= 5.0 {
-		fiveDegreesDrop = true
+	if currTemp - minTemp >= tempChange {
+		significantDrop = true
+	}
+
+	unitSymbol := "°C"
+	if unit == Fahrenheit {
+		unitSymbol = "°F"
 	}
 	
-	if fiveDegreesDrop && fiveDegreesRaise {
+	if significantDrop && significantRise {
 		fmt.Println("temp will change significantly in next four hours")
-	} else if fiveDegreesDrop {
-		fmt.Println("temp will drop 5°C in the next four hours")
-	} else if fiveDegreesRaise {
-		fmt.Println("it'll get 5°C hotter in the next four hours")
+	} else if significantDrop {
+		fmt.Printf("temp will drop %.0f%s in the next four hours\n", tempChange, unitSymbol)
+	} else if significantRise {
+		fmt.Printf("it'll get %.0f%s hotter in the next four hours\n", tempChange, unitSymbol)
 	} else {
 		fmt.Println("temp will be around the same in the next four hours")
 	}
 	
-	fmt.Printf("Current temp: %.1f°C\n", weatherData.Hourly.Temperature[0])
+	fmt.Printf("Current temp: %.1f%s\n", currTemp, unitSymbol)
 	
 	// rain chance
 	maxRainChance := 0
@@ -193,13 +249,13 @@ func analyzeWeather(location Location, weatherData WeatherResponse) {
 			peakHour = i
 		}
 	}
-	if maxRainChance > 60 {
+	if maxRainChance > HighRainChance {
 		if peakHour == 0 {
 			fmt.Printf("Definitely bring an umbrella! Very likely to rain right now\n")
 		} else {
 			fmt.Printf("Definitely bring an umbrella! Very likely to rain in %d hours \n", peakHour)
 		}
-	} else if maxRainChance > 30 {
+	} else if maxRainChance > ModerateRainChance {
 		if peakHour == 0 {
 			fmt.Println("Might rain now - maybe keep a jacket handy.")
 		} else {
@@ -228,8 +284,8 @@ func askUserForLocation() (Location, error) {
 	cityName, _ := reader.ReadString('\n')
 	cityName = strings.TrimSpace(cityName)
 
-	query_url := fmt.Sprintf("https://geocoding-api.open-meteo.com/v1/search?name=%s", url.QueryEscape(cityName))
-	response, err := httpClient.Get(query_url)
+	queryURL := fmt.Sprintf("%s?name=%s", GeocodingBaseURL, url.QueryEscape(cityName))
+	response, err := httpClient.Get(queryURL)
 	if err != nil {
 		return Location{}, fmt.Errorf("error getting the coordinates JSON: %w", err)
 	}
@@ -258,6 +314,12 @@ func askUserForLocation() (Location, error) {
 }
 
 func replyGeneralWeather() {
+	unit := Fahrenheit
+	normalizedUnit := strings.ToLower(tempUnit)
+	if normalizedUnit == "celsius" || normalizedUnit == "c" {
+		unit = Celsius
+	}
+
 	location, err := getLocation()
 	if err != nil {
 		fmt.Println("error getting location automatically: ", err)
@@ -269,12 +331,12 @@ func replyGeneralWeather() {
 			return
 		}
 	}
-	weatherData, err := getWeatherData(location.Lat, location.Lon)
+	weatherData, err := getWeatherData(location.Lat, location.Lon, unit)
 	if err != nil {
 		fmt.Println("error getting weatherData:", err)
 		return
 	}
-	analyzeWeather(location, weatherData)
+	analyzeWeather(location, weatherData, unit)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -285,12 +347,11 @@ func Execute() {
 		os.Exit(1)
 	}
 }
-
 func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-
+	rootCmd.Flags().StringVarP(&tempUnit, "unit", "u", "fahrenheit", "Temperature unit: 'celsius'/'c' or 'fahrenheit'/'f'")
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.weather.yaml)")
 
 	// Cobra also supports local flags, which will only run
