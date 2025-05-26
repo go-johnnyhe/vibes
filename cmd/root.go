@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
+
 	// "math"
 	"net/http"
 	"os"
@@ -42,8 +45,50 @@ type HourlyData struct {
 	WindSpeed []float64 `json:"wind_speed_10m"`
 }
 
+type IPToCoordinates struct {
+	City string 		`json:"city"`
+	Region string		`json:"region"`
+	Coordinates string  `json:"loc"`
+}
+
 func replyGeneralWeather() {
-	response, err := http.Get("https://api.open-meteo.com/v1/forecast?latitude=47.6062&longitude=-122.3321&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=4&timezone=America/Los_Angeles")
+	ip_response, err := http.Get("https://ipinfo.io/json")
+	if err != nil {
+		fmt.Println("couldn't extract IP", err)
+		os.Exit(1)
+	}
+	defer ip_response.Body.Close()
+	ip_body, err := io.ReadAll(ip_response.Body)
+	if err != nil {
+		fmt.Println("Error paring the IP json, ", err)
+		os.Exit(1)
+	}
+	var IPData IPToCoordinates
+	err = json.Unmarshal(ip_body, &IPData)
+	if err != nil {
+		fmt.Println("Error unmarshalling the ip coordinates", err)
+		os.Exit(1)
+	}
+
+	city := IPData.City
+	region := IPData.Region
+
+	fmt.Printf("Here's the current weather condition report for %s, %s:\n", city, region)
+
+	coordinates := strings.Split(IPData.Coordinates, ",")
+	lat, err := strconv.ParseFloat(coordinates[0], 64)
+	if err != nil {
+		fmt.Println("Error converting string to float, ", err)
+		os.Exit(1)
+	}
+	lon, err := strconv.ParseFloat(coordinates[1], 64)
+		if err != nil {
+		fmt.Println("Error converting string to float, ", err)
+		os.Exit(1)
+	}
+
+	meteo_api := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=4&timezone=auto", lat, lon)
+	response, err := http.Get(meteo_api)
 	if err != nil {
 		fmt.Println("Error getting data from Open-Meteo, ", err)
 		os.Exit(1)
@@ -55,6 +100,7 @@ func replyGeneralWeather() {
 		fmt.Println("Error parsing the response, ", err)
 		os.Exit(1)
 	}
+
 	var weatherData WeatherResponse
 	err = json.Unmarshal(body, &weatherData)
 	if err != nil {
@@ -74,7 +120,7 @@ func replyGeneralWeather() {
 	} else if currTemp <= 15.0 {
 		fmt.Println("Classic hoodie/light jacket zone")
 	} else if currTemp <= 20.0 {
-		fmt.Println("Perfect, maybe just a light layer")
+		fmt.Println("Good weather, maybe just a light layer")
 	} else {
 		fmt.Println("T-shirt weather!")
 	}
@@ -109,8 +155,33 @@ func replyGeneralWeather() {
 		fmt.Println("temp will be around the same in the next four hours")
 	}
 
-
 	fmt.Printf("Current temp: %.1f°C\n", weatherData.Hourly.Temperature[0])
+	
+	// rain chance
+	maxRainChance := 0
+	peakHour := 0
+	for i, chance := range weatherData.Hourly.RainChance {
+		if chance > maxRainChance {
+			maxRainChance = chance
+			peakHour = i
+		}
+	}
+	if maxRainChance > 60 {
+		if peakHour == 0 {
+    		fmt.Printf("Definitely bring an umbrella! Very likely to rain right now\n")
+		} else {
+			fmt.Printf("Definitely bring an umbrella! Very likely to rain in %d hours \n", peakHour)
+		}
+	} else if maxRainChance > 30 {
+		if peakHour == 0 {
+			fmt.Println("Might rain now - maybe keep a jacket handy.")
+		} else {
+		fmt.Printf("Might rain in %d hours - maybe keep a jacket handy. \n", peakHour)
+		}
+	} else {
+		fmt.Println("No rain expected.")
+	}
+
 
 }
 
