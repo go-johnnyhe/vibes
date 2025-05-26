@@ -1,4 +1,4 @@
-module github.com/go-johnnyhe/weather
+module github.com/go-johnnyhe/vibes
 
 go 1.24.3
 
