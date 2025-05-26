@@ -4,14 +4,17 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	// "math"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -20,13 +23,8 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "vibes",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "vibes tells you weather",
+	Long: `vibes tells you about the vibes`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) { 
@@ -51,68 +49,90 @@ type IPToCoordinates struct {
 	Coordinates string  `json:"loc"`
 }
 
-func replyGeneralWeather() {
-	ip_response, err := http.Get("https://ipinfo.io/json")
+type Location struct {
+	City string
+	Region string
+	Lat float64
+	Lon float64
+}
+
+var httpClient = &http.Client {
+	Timeout: 10 * time.Second,
+}
+
+func getLocation() (Location, error) {
+	ipResponse, err := httpClient.Get("https://ipinfo.io/json")
 	if err != nil {
-		fmt.Println("couldn't extract IP", err)
-		os.Exit(1)
+		return Location{}, fmt.Errorf("failed to get IP info: %w", err)
 	}
-	defer ip_response.Body.Close()
-	ip_body, err := io.ReadAll(ip_response.Body)
+	defer ipResponse.Body.Close()
+	ipBody, err := io.ReadAll(ipResponse.Body)
 	if err != nil {
-		fmt.Println("Error paring the IP json, ", err)
-		os.Exit(1)
+		return Location{}, fmt.Errorf("failed to read JSON response: %w", err)
 	}
 	var IPData IPToCoordinates
-	err = json.Unmarshal(ip_body, &IPData)
+	err = json.Unmarshal(ipBody, &IPData)
 	if err != nil {
-		fmt.Println("Error unmarshalling the ip coordinates", err)
-		os.Exit(1)
+		return Location{}, fmt.Errorf("failed to unmarshal the IP coordinates: %w", err)
 	}
 
 	city := IPData.City
 	region := IPData.Region
-
-	fmt.Printf("Here's the current weather condition report for %s, %s:\n", city, region)
-
 	coordinates := strings.Split(IPData.Coordinates, ",")
-	lat, err := strconv.ParseFloat(coordinates[0], 64)
-	if err != nil {
-		fmt.Println("Error converting string to float, ", err)
-		os.Exit(1)
+	if len(coordinates) != 2 {
+		return Location{}, fmt.Errorf("error splitting coordinates, length != 2 (lat, lon), %s", IPData.Coordinates)
 	}
-	lon, err := strconv.ParseFloat(coordinates[1], 64)
-		if err != nil {
-		fmt.Println("Error converting string to float, ", err)
-		os.Exit(1)
+	lat, err := strconv.ParseFloat(strings.TrimSpace(coordinates[0]), 64)
+	if err != nil {
+		return Location{}, fmt.Errorf("error converting lattitude string to float: %w", err)
+	}
+	lon, err := strconv.ParseFloat(strings.TrimSpace(coordinates[1]), 64)
+	if err != nil {
+		return Location{}, fmt.Errorf("error converting longitude string to float: %w", err)
 	}
 
-	meteo_api := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=4&timezone=auto", lat, lon)
-	response, err := http.Get(meteo_api)
+	var location Location = Location {
+		City: city,
+		Region: region,
+		Lat: lat,
+		Lon: lon,
+	}
+
+	return location, nil
+	
+}
+
+func getWeatherData(lat float64, lon float64) (WeatherResponse, error) {
+	meteoApi := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=4&timezone=auto", lat, lon)
+	response, err := httpClient.Get(meteoApi)
 	if err != nil {
-		fmt.Println("Error getting data from Open-Meteo, ", err)
-		os.Exit(1)
+		return WeatherResponse{}, fmt.Errorf("error getting data from open-meteo: %w", err)
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		fmt.Println("Error parsing the response, ", err)
-		os.Exit(1)
+		return WeatherResponse{}, fmt.Errorf("error parsing the response: %w", err)
 	}
 
 	var weatherData WeatherResponse
 	err = json.Unmarshal(body, &weatherData)
 	if err != nil {
-		fmt.Println("Error unmarshalling body into weather data, ", err)
-		os.Exit(1)
+		return WeatherResponse{}, fmt.Errorf("error unmarshalling the response: %w", err)
 	}
 
-	// temp rise/drop 5°C
+	return weatherData, nil
+}
+
+func analyzeWeather(location Location, weatherData WeatherResponse) {
+	city := location.City
+	region := location.Region
+	fmt.Printf("Here's the current weather condition report for %s, %s:\n", city, region)
 	fiveDegreesRaise := false
 	fiveDegreesDrop := false
 	currTemp := weatherData.Hourly.Temperature[0]
-
+	
+	// general temperature
 	if currTemp <= 5.0 {
 		fmt.Println("Freezing! Bundle up")
 	} else if currTemp <= 10.0 {
@@ -124,10 +144,10 @@ func replyGeneralWeather() {
 	} else {
 		fmt.Println("T-shirt weather!")
 	}
-
+	
 	minTemp := currTemp
 	maxTemp := currTemp
-
+	
 	for _, temp := range weatherData.Hourly.Temperature {
 		if temp < minTemp {
 			minTemp = temp
@@ -136,15 +156,16 @@ func replyGeneralWeather() {
 			maxTemp = temp
 		}
 	}
-
+	
+	// temp change: rise/drop 5°C
 	if maxTemp - currTemp >= 5.0 {
 		fiveDegreesRaise = true
 	}
-
+	
 	if currTemp - minTemp >= 5.0 {
 		fiveDegreesDrop = true
 	}
-
+	
 	if fiveDegreesDrop && fiveDegreesRaise {
 		fmt.Println("temp will change significantly in next four hours")
 	} else if fiveDegreesDrop {
@@ -154,7 +175,7 @@ func replyGeneralWeather() {
 	} else {
 		fmt.Println("temp will be around the same in the next four hours")
 	}
-
+	
 	fmt.Printf("Current temp: %.1f°C\n", weatherData.Hourly.Temperature[0])
 	
 	// rain chance
@@ -168,7 +189,7 @@ func replyGeneralWeather() {
 	}
 	if maxRainChance > 60 {
 		if peakHour == 0 {
-    		fmt.Printf("Definitely bring an umbrella! Very likely to rain right now\n")
+			fmt.Printf("Definitely bring an umbrella! Very likely to rain right now\n")
 		} else {
 			fmt.Printf("Definitely bring an umbrella! Very likely to rain in %d hours \n", peakHour)
 		}
@@ -181,8 +202,72 @@ func replyGeneralWeather() {
 	} else {
 		fmt.Println("No rain expected.")
 	}
+}
 
+type LocationResult struct {
+	Results []ResultData `json:"results"`
+}
 
+type ResultData struct {
+	Lat float64	`json:"latitude"`
+	Lon float64	`json:"longitude"`
+	Region string `json:"admin1"`
+}
+
+func askUserForLocation() (Location, error) {
+
+	fmt.Println("Please enter your city name (e.g., 'Seattle', 'Boston', 'Tokyo'):")
+	// fmt.Scanln(&cityName)
+	reader := bufio.NewReader(os.Stdin)
+	cityName, _ := reader.ReadString('\n')
+	cityName = strings.TrimSpace(cityName)
+
+	query_url := fmt.Sprintf("https://geocoding-api.open-meteo.com/v1/search?name=%s", url.QueryEscape(cityName))
+	response, err := httpClient.Get(query_url)
+	if err != nil {
+		return Location{}, fmt.Errorf("error getting the coordinates JSON: %w", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return Location{}, fmt.Errorf("error reading the JSON body: %w", err)
+	}
+	var locationData LocationResult
+	err = json.Unmarshal(body, &locationData)
+	if err != nil {
+		return Location{}, fmt.Errorf("error unmarshalling the JSON body: %w", err)
+	}
+
+	if len(locationData.Results) == 0 {
+		return Location{}, fmt.Errorf("no results found for city: %s", cityName)
+	}
+	var location Location = Location {
+		City: cityName,
+		Region: locationData.Results[0].Region,
+		Lat: locationData.Results[0].Lat,
+		Lon: locationData.Results[0].Lon,
+	}
+	return location, nil
+
+}
+
+func replyGeneralWeather() {
+	location, err := getLocation()
+	if err != nil {
+		fmt.Println("error getting location automatically: ", err)
+		location, err = askUserForLocation()
+		if err != nil {
+			fmt.Println("error getting location manually: ", err)
+			fmt.Println("Unable to determine location. Please try again later.")
+			return
+		}
+	}
+	weatherData, err := getWeatherData(location.Lat, location.Lon)
+	if err != nil {
+		fmt.Println("error getting weatherData:", err)
+		return
+	}
+	analyzeWeather(location, weatherData)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -203,7 +288,7 @@ func init() {
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 
