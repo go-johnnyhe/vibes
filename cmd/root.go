@@ -107,7 +107,7 @@ var (
 	httpClient = &http.Client {
 		Timeout: LocationTimeout,
 	}
-	tempUnit string
+	unitFlag string
 )
 
 func getLocation() (Location, error) {
@@ -315,7 +315,7 @@ func askUserForLocation() (Location, error) {
 
 func replyGeneralWeather() {
 	unit := Fahrenheit
-	normalizedUnit := strings.ToLower(tempUnit)
+	normalizedUnit := strings.ToLower(unitFlag)
 	if normalizedUnit == "celsius" || normalizedUnit == "c" {
 		unit = Celsius
 	}
@@ -351,7 +351,7 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.Flags().StringVarP(&tempUnit, "unit", "u", "fahrenheit", "Temperature unit: 'celsius'/'c' or 'fahrenheit'/'f'")
+	rootCmd.Flags().StringVarP(&unitFlag, "unit", "u", "fahrenheit", "Temperature unit: 'celsius'/'c' or 'fahrenheit'/'f'")
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.weather.yaml)")
 
 	// Cobra also supports local flags, which will only run
