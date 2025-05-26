@@ -1,5 +1,18 @@
 /*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
+Application flow:
+
+Location => Weather => Display
+
+1. Get user location:
+   - getLocation() via IP → coordinates, fallback to askUserForLocation()
+   
+2. Fetch weather data:
+   - getWeatherData() → current temp + 4hr forecast + rain probability
+   
+3. Analyze and display:
+   - Process temperature unit from --unit flag  
+   - Apply color coding based on temperature thresholds
+   - Output weather report with colors and recommendations
 */
 package cmd
 
@@ -16,15 +29,15 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/fatih/color"
 )
 
-// rootCmd represents the base command when called without any subcommands
+// vibes base command
 var rootCmd = &cobra.Command{
 	Use:   "vibes",
 	Short: "vibes tells you weather",
 	Long: `vibes tells you about the vibes`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
+
 	Run: func(cmd *cobra.Command, args []string) { 
 		replyGeneralWeather()
 	},
@@ -180,6 +193,31 @@ func getWeatherData(lat float64, lon float64, unit TempUnit) (WeatherResponse, e
 	return weatherData, nil
 }
 
+func getTemperatureColor(temp float64, unit TempUnit) *color.Color {
+	freezing, cold, cool, mild, _ := getThresholds(unit)
+	switch {
+	case temp <= freezing:
+		return color.New(color.FgBlue, color.Bold)
+	case temp <= cold:
+		return color.New(color.FgCyan)
+	case temp <= cool:
+		return color.New(color.FgWhite)
+	case temp <= mild:
+		return color.New(color.FgYellow)
+	default:
+		return color.New(color.FgRed, color.Bold)
+	}
+}
+
+func colorizeTemp(temp float64, unit TempUnit) string {
+	unitSymbol := "°C"
+	if unit == Fahrenheit {
+		unitSymbol = "°F"
+	}
+	tempColor := getTemperatureColor(temp, unit)
+	return tempColor.Sprintf("%.1f%s", temp, unitSymbol)
+}
+
 func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUnit) {
 	freezing, cold, cool, mild, tempChange := getThresholds(unit)
 	city := location.City
@@ -188,16 +226,18 @@ func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUni
 	significantRise := false
 	significantDrop := false
 	currTemp := weatherData.Hourly.Temperature[0]
+
+	tempColor := getTemperatureColor(currTemp, unit)
 	
 	// general temperature
 	if currTemp <= freezing {
-		fmt.Println("Freezing! Bundle up")
+		tempColor.Println("Freezing! Bundle up")
 	} else if currTemp <= cold {
-		fmt.Println("Proper jacket weather, maybe gloves")
+		tempColor.Println("Proper jacket weather, maybe gloves")
 	} else if currTemp <= cool {
-		fmt.Println("Classic hoodie/light jacket zone")
+		tempColor.Println("Classic hoodie/light jacket zone")
 	} else if currTemp <= mild {
-		fmt.Println("Good weather, maybe just a light layer")
+		tempColor.Println("Good weather, maybe just a light layer")
 	} else {
 		fmt.Println("T-shirt weather!")
 	}
@@ -231,14 +271,14 @@ func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUni
 	if significantDrop && significantRise {
 		fmt.Println("temp will change significantly in next four hours")
 	} else if significantDrop {
-		fmt.Printf("temp will drop %.0f%s in the next four hours\n", tempChange, unitSymbol)
+		fmt.Printf("temp will drop %s in the next four hours\n", color.New(color.FgBlue).Sprintf("%.0f%s", tempChange, unitSymbol))
 	} else if significantRise {
-		fmt.Printf("it'll get %.0f%s hotter in the next four hours\n", tempChange, unitSymbol)
+		fmt.Printf("it'll get %s hotter in the next four hours\n", color.New(color.FgRed).Sprintf("%.0f%s", tempChange, unitSymbol))
 	} else {
 		fmt.Println("temp will be around the same in the next four hours")
 	}
 	
-	fmt.Printf("Current temp: %.1f%s\n", currTemp, unitSymbol)
+	fmt.Printf("Current temperature: %s\n", colorizeTemp(currTemp, unit))
 	
 	// rain chance
 	maxRainChance := 0

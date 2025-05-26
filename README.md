@@ -1,10 +1,14 @@
+# Vibes
+
 Cozy weather app, ask quick questions like
+
 - rain?
 - coat?
 - hot?
 - etc.
 
-Update:
+Next up:
 
-5/20:
-- Currently able to fetch basic weather predictions from OpenWeatherMap
+- enable users to choose forecast hour range
+- add personality and randomized outputs
+- improve this README
