@@ -61,11 +61,17 @@ var httpClient = &http.Client {
 }
 
 func getLocation() (Location, error) {
+
 	ipResponse, err := httpClient.Get("https://ipinfo.io/json")
 	if err != nil {
 		return Location{}, fmt.Errorf("failed to get IP info: %w", err)
 	}
 	defer ipResponse.Body.Close()
+
+	if ipResponse.StatusCode != http.StatusOK {
+		return Location{}, fmt.Errorf("location service returned status %d", ipResponse.StatusCode)
+	}
+
 	ipBody, err := io.ReadAll(ipResponse.Body)
 	if err != nil {
 		return Location{}, fmt.Errorf("failed to read JSON response: %w", err)
@@ -255,6 +261,7 @@ func replyGeneralWeather() {
 	location, err := getLocation()
 	if err != nil {
 		fmt.Println("error getting location automatically: ", err)
+		fmt.Println("let's try this manually...")
 		location, err = askUserForLocation()
 		if err != nil {
 			fmt.Println("error getting location manually: ", err)
