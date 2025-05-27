@@ -7,7 +7,7 @@ Location => Weather => Display
    - getLocation() via IP → coordinates, fallback to askUserForLocation()
    
 2. Fetch weather data:
-   - getWeatherData() → current temp + 4hr forecast + rain probability
+   - getWeatherData() → current temp + X hrs forecast + rain probability
    
 3. Analyze and display:
    - Process temperature unit from --unit flag  
@@ -83,7 +83,6 @@ const (
     ModerateRainChance   = 30
 
 	// API params
-	ForecastHours = 4
 	LocationTimeout = 10 * time.Second
 
 	// API endpoints
@@ -121,6 +120,7 @@ var (
 		Timeout: LocationTimeout,
 	}
 	unitFlag string
+	durationFlag int
 )
 
 func getLocation() (Location, error) {
@@ -171,8 +171,8 @@ func getLocation() (Location, error) {
 	
 }
 
-func getWeatherData(lat float64, lon float64, unit TempUnit) (WeatherResponse, error) {
-	meteoApi := fmt.Sprintf("%s?latitude=%f&longitude=%f&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=4&timezone=auto&temperature_unit=%s", OpenMeteoBaseURL, lat, lon, string(unit))
+func getWeatherData(lat float64, lon float64, unit TempUnit, duration int) (WeatherResponse, error) {
+	meteoApi := fmt.Sprintf("%s?latitude=%f&longitude=%f&hourly=temperature_2m,precipitation_probability,precipitation,rain,wind_speed_10m&forecast_hours=%d&timezone=auto&temperature_unit=%s", OpenMeteoBaseURL, lat, lon, duration, string(unit))
 	response, err := httpClient.Get(meteoApi)
 	if err != nil {
 		return WeatherResponse{}, fmt.Errorf("error getting data from open-meteo: %w", err)
@@ -201,7 +201,7 @@ func getTemperatureColor(temp float64, unit TempUnit) *color.Color {
 	case temp <= cold:
 		return color.New(color.FgCyan)
 	case temp <= cool:
-		return color.New(color.FgWhite)
+		return color.New(color.FgGreen, color.Bold)
 	case temp <= mild:
 		return color.New(color.FgYellow)
 	default:
@@ -218,7 +218,7 @@ func colorizeTemp(temp float64, unit TempUnit) string {
 	return tempColor.Sprintf("%.1f%s", temp, unitSymbol)
 }
 
-func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUnit) {
+func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUnit, duration int) {
 	freezing, cold, cool, mild, tempChange := getThresholds(unit)
 	city := location.City
 	region := location.Region
@@ -239,7 +239,7 @@ func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUni
 	} else if currTemp <= mild {
 		tempColor.Println("Good weather, maybe just a light layer")
 	} else {
-		fmt.Println("T-shirt weather!")
+		tempColor.Println("T-shirt weather!")
 	}
 	
 	minTemp := currTemp
@@ -269,13 +269,13 @@ func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUni
 	}
 	
 	if significantDrop && significantRise {
-		fmt.Println("temp will change significantly in next four hours")
+		fmt.Printf("temp will change significantly in next %d hours\n", duration)
 	} else if significantDrop {
-		fmt.Printf("temp will drop %s in the next four hours\n", color.New(color.FgBlue).Sprintf("%.0f%s", tempChange, unitSymbol))
+		fmt.Printf("temp will drop %s in the next %d hours\n", color.New(color.FgBlue).Sprintf("%.0f%s", tempChange, unitSymbol), duration)
 	} else if significantRise {
-		fmt.Printf("it'll get %s hotter in the next four hours\n", color.New(color.FgRed).Sprintf("%.0f%s", tempChange, unitSymbol))
+		fmt.Printf("it'll get %s hotter in the next %d hours\n", color.New(color.FgRed).Sprintf("%.0f%s", tempChange, unitSymbol), duration)
 	} else {
-		fmt.Println("temp will be around the same in the next four hours")
+		fmt.Printf("temp will be around the same in the next %d hours\n", duration)
 	}
 	
 	fmt.Printf("Current temperature: %s\n", colorizeTemp(currTemp, unit))
@@ -360,6 +360,15 @@ func replyGeneralWeather() {
 		unit = Celsius
 	}
 
+	if durationFlag <= 0 {
+		fmt.Println("Hours must be positive")
+		return
+	}
+	if durationFlag > 168 {
+    	fmt.Println("Maximum forecast is 168 hours (7 days)")
+    	return
+	}
+
 	location, err := getLocation()
 	if err != nil {
 		fmt.Println("error getting location automatically: ", err)
@@ -371,12 +380,14 @@ func replyGeneralWeather() {
 			return
 		}
 	}
-	weatherData, err := getWeatherData(location.Lat, location.Lon, unit)
+
+
+	weatherData, err := getWeatherData(location.Lat, location.Lon, unit, durationFlag)
 	if err != nil {
 		fmt.Println("error getting weatherData:", err)
 		return
 	}
-	analyzeWeather(location, weatherData, unit)
+	analyzeWeather(location, weatherData, unit, durationFlag)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -393,7 +404,7 @@ func init() {
 	// will be global for your application.
 	rootCmd.Flags().StringVarP(&unitFlag, "unit", "u", "fahrenheit", "Temperature unit: 'celsius'/'c' or 'fahrenheit'/'f'")
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.weather.yaml)")
-
+	rootCmd.Flags().IntVarP(&durationFlag, "hours", "d", 4, "Number of hours you'd like to forecast")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
