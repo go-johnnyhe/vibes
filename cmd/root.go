@@ -115,6 +115,16 @@ type Location struct {
 	Lon float64
 }
 
+type LocationResult struct {
+	Results []ResultData `json:"results"`
+}
+
+type ResultData struct {
+	Lat float64	`json:"latitude"`
+	Lon float64	`json:"longitude"`
+	Region string `json:"admin1"`
+}
+
 var (
 	httpClient = &http.Client {
 		Timeout: LocationTimeout,
@@ -304,16 +314,6 @@ func analyzeWeather(location Location, weatherData WeatherResponse, unit TempUni
 	} else {
 		fmt.Println("No rain expected.")
 	}
-}
-
-type LocationResult struct {
-	Results []ResultData `json:"results"`
-}
-
-type ResultData struct {
-	Lat float64	`json:"latitude"`
-	Lon float64	`json:"longitude"`
-	Region string `json:"admin1"`
 }
 
 func askUserForLocation() (Location, error) {
