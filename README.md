@@ -1,12 +1,11 @@
 # 🌤️ Vibes
 
-> Because checking the weather should vibe with your life
+## Another weather app, seriously?!
 
-A cozy CLI weather app that actually tells you what you need to know. No BS, just vibes.
+Weather apps show numbers. Vibes makes decisions. Vibes tells you what to wear, not just the temperature.
 
-## What's this?
 
-Vibes gives you weather that makes sense. Instead of "15°C with 40% precipitation", you get:
+Instead of "15°C with 40% precipitation", you get:
 
 ```
 $ vibes
@@ -19,10 +18,9 @@ Might rain in 2 hours - maybe keep a jacket handy.
 
 Built with Go. Powered by Open-Meteo API. Zero API keys required.
 
-## Features
-
-- 🎨 **Color-coded temps** - Blue for freezing, red for hot, you get it
+## Cool Features
 - 📍 **Auto-location** - Uses your IP to find you
+- 🎨 **Color-coded temps** - Blue for freezing, red for hot, you get it
 - 🌧️ **Rain alerts** - Tells you when to grab an umbrella
 - 🌡️ **Temperature advice** - "T-shirt weather" vs "Bundle up"
 - ⏰ **Custom forecasts** - Check the next hour or next week
