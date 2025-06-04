@@ -2,9 +2,6 @@
 
 ## Another weather app, seriously?!
 
-Weather apps show numbers. Vibes makes decisions. Vibes tells you what to wear, not just the temperature.
-
-
 Instead of "15°C with 40% precipitation", you get:
 
 ```
@@ -15,6 +12,9 @@ temp will be around the same in the next 4 hours
 Current temperature: 13.2°C
 Might rain in 2 hours - maybe keep a jacket handy.
 ```
+
+Weather apps show numbers. Vibes tells you what to wear, not just the temperature.
+
 
 Built with Go. Powered by Open-Meteo API. Zero API keys required.
 
