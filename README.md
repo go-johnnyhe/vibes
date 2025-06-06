@@ -82,7 +82,7 @@ vibes -u c
 
 ## Contributing
 
-Got ideas? Found a bug? PRs welcome!
+Got ideas? Found a bug? PRs welcome. If you like this project or have any suggestions, I'd love to know!
 
 ## License
 
