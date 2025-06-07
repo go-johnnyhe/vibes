@@ -16,7 +16,7 @@ Might rain in 2 hours - maybe keep a jacket handy.
 Weather apps show numbers. Vibes tells you what to wear, not just the temperature.
 
 
-Built with Go. Powered by Open-Meteo API. Zero API keys required.
+Built with Go. Powered by Open-Meteo API. **Zero API keys required.**
 
 ## Cool Features
 - 📍 **Auto-location** - Uses your IP to find you
