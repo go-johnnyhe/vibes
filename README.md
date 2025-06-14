@@ -2,6 +2,8 @@
 
 ## Another weather app, seriously?!
 
+> **Note:** Despite the name, this project is NOT vibe-coded
+
 Instead of "15°C with 40% precipitation", you get:
 
 ```
