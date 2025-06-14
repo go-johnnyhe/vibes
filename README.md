@@ -1,4 +1,4 @@
-# 🌤️ Vibes
+# 🌤️ vibes
 
 ## Another weather app, seriously?!
 
